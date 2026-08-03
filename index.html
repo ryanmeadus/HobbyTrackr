@@ -1,14 +1,1342 @@
-Login
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HobbyTrackr</title>
   
-
-
-
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
   
-    Sign In
-    
-    
-      Username
-      
-      Password
-      
-      Log In
+  <!-- React & ReactDOM CDNs -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  
+  <!-- Babel CDN -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      background-color: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      padding-bottom: 80px;
+    }
+
+    button, select, input, textarea {
+      font-size: 16px !important;
+    }
+
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    .scrollbar-none::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-none {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    function App() {
+      // Main View Navigation: 'home' | 'leaderboard' | 'personal' (defaults to 'home')
+      const [currentTab, setCurrentTab] = useState('home');
+
+      // Leaderboard Sub-Tab Navigation: 'monthly' | 'yearly' | 'global'
+      const [leaderboardSubTab, setLeaderboardSubTab] = useState('monthly');
+
+      // Active Dashboard Management State
+      const [dashboards, setDashboards] = useState([
+        {
+          id: 'dash_default',
+          name: 'Main Hobby Tracker',
+          avatar: '🎨',
+          isPublic: true,
+          monthlyCompleted: 16,
+          yearlyCompleted: 115,
+          factions: [
+            { id: '1', name: 'Orks', system: 'Warhammer 40K', painted: 140, wip: 20, backlog: 80 },
+            { id: '2', name: 'Imperial Fists', system: 'Warhammer 40K', painted: 65, wip: 15, backlog: 45 },
+            { id: '3', name: 'Terrain', system: 'Agnostic', painted: 15, wip: 5, backlog: 25 },
+          ],
+          featuredModel: {
+            title: 'Ork Warboss in Mega Armour',
+            faction: 'Orks',
+            date: 'August 2026',
+            notes: 'Used Citadel Orruk Flesh, Zenithal highlight with acrylic inks, and Grimdark Streaking Grime enamel wash.',
+            imageUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=800&auto=format&fit=crop'
+          },
+          gallery: [
+            {
+              id: '101',
+              title: 'Ork Warboss in Mega Armour',
+              faction: 'Orks',
+              count: 1,
+              transitionType: 'wip_to_painted',
+              date: 'Aug 3, 2026',
+              notes: 'Enamel weathering and custom resin base.',
+              imageUrl: 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=800&auto=format&fit=crop'
+            }
+          ]
+        }
+      ]);
+
+      const [activeDashboardId, setActiveDashboardId] = useState('dash_default');
+      const [showDashboardModal, setShowDashboardModal] = useState(false);
+      const [newDashboardName, setNewDashboardName] = useState('');
+      const [newDashboardAvatar, setNewDashboardAvatar] = useState('🛡️');
+
+      // Helper to get active dashboard
+      const activeDash = dashboards.find(d => d.id === activeDashboardId) || dashboards[0];
+
+      // Form State for Log Transition
+      const [newCategoryName, setNewCategoryName] = useState('');
+      const [newCategorySystem, setNewCategorySystem] = useState('');
+      const [showManageModal, setShowManageModal] = useState(false);
+
+      const [form, setForm] = useState({
+        faction: activeDash?.factions[0]?.name || '',
+        transition: 'wip_to_painted',
+        amount: 1,
+        title: '',
+        notes: '',
+        imageUrl: '',
+        setFeatured: false
+      });
+
+      const formRef = useRef(null);
+
+      // Keep form faction aligned with current active dashboard categories
+      useEffect(() => {
+        if (activeDash && activeDash.factions.length > 0) {
+          setForm(prev => ({ ...prev, faction: activeDash.factions[0].name }));
+        }
+      }, [activeDashboardId]);
+
+      const scrollToForm = () => {
+        if (formRef.current) {
+          formRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+      };
+
+      // Create New Dashboard
+      const handleCreateDashboard = (e) => {
+        e.preventDefault();
+        if (!newDashboardName.trim()) return;
+
+        const newDash = {
+          id: `dash_${Date.now()}`,
+          name: newDashboardName.trim(),
+          avatar: newDashboardAvatar || '⚔️',
+          isPublic: true,
+          monthlyCompleted: 0,
+          yearlyCompleted: 0,
+          factions: [
+            { id: Date.now().toString(), name: 'General Forces', system: 'Custom', painted: 0, wip: 0, backlog: 0 }
+          ],
+          featuredModel: null,
+          gallery: []
+        };
+
+        setDashboards(prev => [...prev, newDash]);
+        setActiveDashboardId(newDash.id);
+        setNewDashboardName('');
+        setShowDashboardModal(false);
+      };
+
+      const handleDeleteDashboard = (id, name) => {
+        if (dashboards.length <= 1) {
+          alert('You must maintain at least one active dashboard.');
+          return;
+        }
+
+        if (confirm(`Are you sure you want to delete dashboard "${name}"?`)) {
+          const updated = dashboards.filter(d => d.id !== id);
+          setDashboards(updated);
+          if (activeDashboardId === id) {
+            setActiveDashboardId(updated[0].id);
+          }
+        }
+      };
+
+      const handleAddCategory = (e) => {
+        e.preventDefault();
+        if (!newCategoryName.trim()) return;
+
+        const createdCategory = {
+          id: Date.now().toString(),
+          name: newCategoryName.trim(),
+          system: newCategorySystem.trim() || 'Custom',
+          painted: 0,
+          wip: 0,
+          backlog: 0
+        };
+
+        setDashboards(prev => prev.map(d => {
+          if (d.id === activeDashboardId) {
+            return { ...d, factions: [...d.factions, createdCategory] };
+          }
+          return d;
+        }));
+
+        setNewCategoryName('');
+        setNewCategorySystem('');
+      };
+
+      const handleRemoveCategory = (catId, catName) => {
+        if (activeDash.factions.length <= 1) {
+          alert('You must keep at least one category/army per dashboard.');
+          return;
+        }
+
+        if (confirm(`Are you sure you want to delete "${catName}"?`)) {
+          setDashboards(prev => prev.map(d => {
+            if (d.id === activeDashboardId) {
+              const updatedFactions = d.factions.filter(f => f.id !== catId);
+              return { ...d, factions: updatedFactions };
+            }
+            return d;
+          }));
+        }
+      };
+
+      const handleStepperAdjust = (factionName, bucket, delta) => {
+        setDashboards(prev => prev.map(d => {
+          if (d.id === activeDashboardId) {
+            const updatedFactions = d.factions.map(f => {
+              if (f.name === factionName) {
+                return { ...f, [bucket]: Math.max(0, f[bucket] + delta) };
+              }
+              return f;
+            });
+            return { ...d, factions: updatedFactions };
+          }
+          return d;
+        }));
+      };
+
+      const handleTogglePublic = () => {
+        setDashboards(prev => prev.map(d => {
+          if (d.id === activeDashboardId) {
+            return { ...d, isPublic: !d.isPublic };
+          }
+          return d;
+        }));
+      };
+
+      const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setForm(prev => ({ ...prev, imageUrl: reader.result }));
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const amt = parseInt(form.amount) || 1;
+
+        setDashboards(prev => prev.map(d => {
+          if (d.id === activeDashboardId) {
+            let mComp = d.monthlyCompleted;
+            let yComp = d.yearlyCompleted;
+
+            const updatedFactions = d.factions.map(f => {
+              if (f.name === form.faction) {
+                let { painted, wip, backlog } = f;
+
+                switch (form.transition) {
+                  case 'new_purchase':
+                    backlog += amt;
+                    break;
+                  case 'backlog_to_wip':
+                    backlog = Math.max(0, backlog - amt);
+                    wip += amt;
+                    break;
+                  case 'wip_to_painted':
+                    wip = Math.max(0, wip - amt);
+                    painted += amt;
+                    mComp += amt;
+                    yComp += amt;
+                    break;
+                  case 'backlog_to_painted':
+                    backlog = Math.max(0, backlog - amt);
+                    painted += amt;
+                    mComp += amt;
+                    yComp += amt;
+                    break;
+                  case 'sold_trim':
+                    backlog = Math.max(0, backlog - amt);
+                    break;
+                  default:
+                    break;
+                }
+
+                return { ...f, painted, wip, backlog };
+              }
+              return f;
+            });
+
+            const isFinishing = form.transition === 'wip_to_painted' || form.transition === 'backlog_to_painted';
+            const imgToUse = form.imageUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop';
+
+            let updatedGallery = d.gallery;
+            let updatedFeatured = d.featuredModel;
+
+            if (form.title || isFinishing) {
+              const newEntry = {
+                id: Date.now().toString(),
+                title: form.title || `${amt}x ${form.faction} Models`,
+                faction: form.faction,
+                count: amt,
+                transitionType: form.transition,
+                date: 'Today',
+                notes: form.notes || 'No recipe notes recorded.',
+                imageUrl: imgToUse
+              };
+              updatedGallery = [newEntry, ...d.gallery];
+
+              if (form.setFeatured) {
+                updatedFeatured = {
+                  title: newEntry.title,
+                  faction: newEntry.faction,
+                  date: 'August 2026',
+                  notes: newEntry.notes,
+                  imageUrl: imgToUse
+                };
+              }
+            }
+
+            return {
+              ...d,
+              monthlyCompleted: mComp,
+              yearlyCompleted: yComp,
+              factions: updatedFactions,
+              gallery: updatedGallery,
+              featuredModel: updatedFeatured
+            };
+          }
+          return d;
+        }));
+
+        setForm({
+          faction: activeDash?.factions[0]?.name || '',
+          transition: 'wip_to_painted',
+          amount: 1,
+          title: '',
+          notes: '',
+          imageUrl: '',
+          setFeatured: false
+        });
+      };
+
+      // Current Active Dashboard Totals
+      const totalPainted = activeDash ? activeDash.factions.reduce((acc, f) => acc + f.painted, 0) : 0;
+      const totalWip = activeDash ? activeDash.factions.reduce((acc, f) => acc + f.wip, 0) : 0;
+      const totalBacklog = activeDash ? activeDash.factions.reduce((acc, f) => acc + f.backlog, 0) : 0;
+      const totalCollection = totalPainted + totalWip + totalBacklog;
+      const completionRate = totalCollection ? ((totalPainted / totalCollection) * 100).toFixed(1) : 0;
+
+      // Aggregate Global Totals across ALL custom dashboards
+      const globalTotalModels = dashboards.reduce((acc, d) => acc + d.factions.reduce((a, f) => a + f.painted + f.wip + f.backlog, 0), 0);
+      const globalTotalPainted = dashboards.reduce((acc, d) => acc + d.factions.reduce((a, f) => a + f.painted, 0), 0);
+      const globalTotalWip = dashboards.reduce((acc, d) => acc + d.factions.reduce((a, f) => a + f.wip, 0), 0);
+      const globalTotalBacklog = dashboards.reduce((acc, d) => acc + d.factions.reduce((a, f) => a + f.backlog, 0), 0);
+
+      // Featured model spotlight selection from active public dashboards
+      const publicDashboardsWithFeatured = dashboards.filter(d => d.isPublic && d.featuredModel);
+      const dailyFeaturedUser = publicDashboardsWithFeatured.length > 0 ? publicDashboardsWithFeatured[0] : null;
+
+      // Personal Dashboard Charts Ref
+      const donutRef = useRef(null);
+      const barRef = useRef(null);
+      const donutInstance = useRef(null);
+      const barInstance = useRef(null);
+
+      // Global Pie Chart Ref
+      const globalPieRef = useRef(null);
+      const globalPieInstance = useRef(null);
+
+      useEffect(() => {
+        if (currentTab === 'personal' && activeDash) {
+          if (donutInstance.current) donutInstance.current.destroy();
+          if (barInstance.current) barInstance.current.destroy();
+
+          if (donutRef.current) {
+            donutInstance.current = new Chart(donutRef.current, {
+              type: 'doughnut',
+              data: {
+                labels: ['Finished', 'WIP', 'Backlog'],
+                datasets: [{
+                  data: [totalPainted, totalWip, totalBacklog],
+                  backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
+                  borderWidth: 0
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 12 } } }
+              }
+            });
+          }
+
+          if (barRef.current) {
+            barInstance.current = new Chart(barRef.current, {
+              type: 'bar',
+              data: {
+                labels: activeDash.factions.map(f => f.name),
+                datasets: [
+                  { label: 'Painted', data: activeDash.factions.map(f => f.painted), backgroundColor: '#22c55e' },
+                  { label: 'WIP', data: activeDash.factions.map(f => f.wip), backgroundColor: '#f59e0b' },
+                  { label: 'Backlog', data: activeDash.factions.map(f => f.backlog), backgroundColor: '#ef4444' }
+                ]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
+                  y: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } }
+                },
+                plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', boxWidth: 12, padding: 12 } } }
+              }
+            });
+          }
+        }
+      }, [activeDash, currentTab, totalPainted, totalWip, totalBacklog]);
+
+      // Global Pie Chart Render
+      useEffect(() => {
+        if (currentTab === 'leaderboard' && leaderboardSubTab === 'global') {
+          if (globalPieInstance.current) globalPieInstance.current.destroy();
+
+          if (globalPieRef.current) {
+            globalPieInstance.current = new Chart(globalPieRef.current, {
+              type: 'pie',
+              data: {
+                labels: ['Completed / Painted', 'In Progress (WIP)', 'Backlog (Grey)'],
+                datasets: [{
+                  data: [globalTotalPainted, globalTotalWip, globalTotalBacklog],
+                  backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
+                  borderColor: '#0f172a',
+                  borderWidth: 2
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: 'bottom', labels: { color: '#f8fafc', font: { size: 13, weight: 'bold' }, padding: 16 } },
+                  tooltip: {
+                    callbacks: {
+                      label: function(context) {
+                        const val = context.raw || 0;
+                        const pct = globalTotalModels ? ((val / globalTotalModels) * 100).toFixed(1) : 0;
+                        return ` ${context.label}: ${val} models (${pct}%)`;
+                      }
+                    }
+                  }
+                }
+              }
+            });
+          }
+        }
+      }, [currentTab, leaderboardSubTab, globalTotalPainted, globalTotalWip, globalTotalBacklog, globalTotalModels]);
+
+      // Leaderboard Data Calculation
+      const monthlyLeaderboard = [...dashboards].sort((a, b) => b.monthlyCompleted - a.monthlyCompleted);
+      const yearlyLeaderboard = [...dashboards].sort((a, b) => b.yearlyCompleted - a.yearlyCompleted);
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:p-6 space-y-6">
+          
+          {/* Main Top Navigation Header */}
+          <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                <span>🖌️</span> HobbyTrackr
+              </h1>
+              <p className="text-slate-400 text-xs sm:text-sm">Manage multiple custom dashboards, track progress & view rankings</p>
+            </div>
+
+            {/* Dashboard Selector & Switcher Tabs */}
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              {/* Dashboard Picker */}
+              <div className="flex items-center gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
+                <span className="text-xs text-slate-400 font-bold pl-2">Dashboard:</span>
+                <select
+                  value={activeDashboardId}
+                  onChange={(e) => setActiveDashboardId(e.target.value)}
+                  className="bg-slate-950 text-emerald-400 text-xs font-bold px-2.5 py-1.5 rounded-xl border border-slate-800 focus:outline-none"
+                >
+                  {dashboards.map(d => (
+                    <option key={d.id} value={d.id}>{d.avatar} {d.name}</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={() => setShowDashboardModal(true)}
+                  className="touch-target px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 font-bold text-xs rounded-xl border border-emerald-500/30 transition-all flex items-center gap-1"
+                  title="Create or Manage Dashboards"
+                >
+                  <span>➕</span>
+                </button>
+              </div>
+
+              {/* Navigation Tabs */}
+              <div className="flex items-center gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
+                <button
+                  onClick={() => setCurrentTab('home')}
+                  className={`touch-target px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    currentTab === 'home' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>🌍</span> Hub Overview
+                </button>
+                
+                <button
+                  onClick={() => setCurrentTab('leaderboard')}
+                  className={`touch-target px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    currentTab === 'leaderboard' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>🏆</span> Leaderboard
+                </button>
+
+                <button
+                  onClick={() => setCurrentTab('personal')}
+                  className={`touch-target px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    currentTab === 'personal' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>👤</span> My Dashboard
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* DASHBOARD CREATION & MANAGEMENT MODAL */}
+          {showDashboardModal && (
+            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 space-y-5 shadow-2xl">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <span>🗂️</span> Manage Your Dashboards
+                  </h2>
+                  <button onClick={() => setShowDashboardModal(false)} className="text-slate-400 hover:text-white font-bold text-xl px-2">✕</button>
+                </div>
+
+                {/* Form to create a new dashboard */}
+                <form onSubmit={handleCreateDashboard} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-3">
+                  <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Create New Dashboard</div>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Avatar (e.g. ⚔️, 🛡️, 🤖)" 
+                      value={newDashboardAvatar} 
+                      onChange={e => setNewDashboardAvatar(e.target.value)}
+                      className="touch-target w-16 bg-slate-900 border border-slate-800 rounded-lg text-center text-sm text-white focus:outline-none"
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Dashboard Title (e.g. Warhammer 40k, Gunpla)" 
+                      value={newDashboardName} 
+                      onChange={e => setNewDashboardName(e.target.value)}
+                      className="touch-target flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <button 
+                    type="submit"
+                    className="touch-target w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all"
+                  >
+                    + Add New Dashboard
+                  </button>
+                </form>
+
+                {/* List of existing dashboards with delete option */}
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  <div className="text-xs font-semibold text-slate-400 uppercase">Existing Dashboards ({dashboards.length})</div>
+                  {dashboards.map(d => (
+                    <div key={d.id} className="bg-slate-950 border border-slate-800/80 rounded-xl p-3 flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{d.avatar}</span>
+                        <div>
+                          <div className="font-bold text-white text-sm">{d.name}</div>
+                          <div className="text-[10px] text-slate-400">{d.factions.length} categories tracked</div>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleDeleteDashboard(d.id, d.name)}
+                        className="touch-target text-red-400 hover:text-red-300 text-xs font-semibold px-3 py-1 rounded hover:bg-red-950/40 border border-red-500/20"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 text-right">
+                  <button 
+                    onClick={() => setShowDashboardModal(false)}
+                    className="touch-target bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-5 rounded-xl"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 1. COMMUNITY HOME PAGE */}
+          {currentTab === 'home' && (
+            <div className="space-y-6">
+              
+              {/* Daily Spotlight Hero Banner */}
+              {dailyFeaturedUser && dailyFeaturedUser.featuredModel ? (
+                <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/40 border border-emerald-500/30 rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 md:grid-cols-12">
+                  <div className="md:col-span-5 h-56 sm:h-72 md:h-auto relative bg-slate-950">
+                    <img 
+                      src={dailyFeaturedUser.featuredModel.imageUrl} 
+                      alt={dailyFeaturedUser.featuredModel.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                      <span className="bg-amber-500/90 text-slate-950 text-[10px] sm:text-xs font-extrabold uppercase px-3 py-1 rounded-full backdrop-blur-sm shadow-lg flex items-center gap-1">
+                        <span>🌟</span> Featured Model
+                      </span>
+                    </div>
+                  </div>
+                  <div className="md:col-span-7 p-5 sm:p-7 flex flex-col justify-between space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{dailyFeaturedUser.avatar}</span>
+                          <span className="text-xs sm:text-sm font-bold text-emerald-400">{dailyFeaturedUser.name}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">{dailyFeaturedUser.featuredModel.date}</span>
+                      </div>
+
+                      <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 leading-tight">
+                        {dailyFeaturedUser.featuredModel.title}
+                      </h2>
+
+                      <div className="inline-block text-[11px] font-semibold text-slate-300 bg-slate-800/80 px-2.5 py-1 rounded-lg mb-3">
+                        {dailyFeaturedUser.featuredModel.faction}
+                      </div>
+
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-300">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Painter's Notes:</span>
+                        <p className="italic leading-relaxed">{dailyFeaturedUser.featuredModel.notes}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center space-y-2">
+                  <div className="text-2xl">🖌️</div>
+                  <h3 className="text-lg font-bold text-white">No Featured Model Set</h3>
+                  <p className="text-xs text-slate-400">Log a transition in your dashboard and check "Set as Featured Spotlight" to display a model here.</p>
+                </div>
+              )}
+
+              {/* Dashboards Grid Overview */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                    <span>👥</span> Active Dashboards Overview
+                  </h2>
+                  <button 
+                    onClick={() => setShowDashboardModal(true)}
+                    className="text-xs text-emerald-400 font-bold hover:underline"
+                  >
+                    + Create New Dashboard
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {dashboards.map(dash => {
+                    const dashPainted = dash.factions.reduce((a, f) => a + f.painted, 0);
+                    const dashWip = dash.factions.reduce((a, f) => a + f.wip, 0);
+                    const dashBacklog = dash.factions.reduce((a, f) => a + f.backlog, 0);
+                    const dashTotal = dashPainted + dashWip + dashBacklog;
+                    const isActive = dash.id === activeDashboardId;
+
+                    return (
+                      <div 
+                        key={dash.id} 
+                        className={`bg-slate-900 rounded-xl p-4 space-y-3 flex flex-col justify-between border transition-all ${
+                          isActive ? 'border-emerald-500/80 shadow-lg' : 'border-slate-800'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-2xl">{dash.avatar}</span>
+                              <div>
+                                <div className="font-bold text-white text-base flex items-center gap-1.5">
+                                  <span>{dash.name}</span>
+                                  {isActive && <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded font-bold">Active</span>}
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                  {dash.isPublic ? '🌐 Shared Profile' : '🔒 Private Dashboard'}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setActiveDashboardId(dash.id);
+                                setCurrentTab('personal');
+                              }}
+                              className="touch-target text-xs font-bold text-emerald-400 hover:underline"
+                            >
+                              Open ➔
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 text-center bg-slate-950 p-2 rounded-xl border border-slate-800/80">
+                            <div>
+                              <div className="text-[9px] text-slate-400 uppercase font-bold">Painted</div>
+                              <div className="text-sm font-black text-emerald-400">{dashPainted}</div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] text-slate-400 uppercase font-bold">WIP</div>
+                              <div className="text-sm font-black text-amber-400">{dashWip}</div>
+                            </div>
+                            <div>
+                              <div className="text-[9px] text-slate-400 uppercase font-bold">Backlog</div>
+                              <div className="text-sm font-black text-red-400">{dashBacklog}</div>
+                            </div>
+                          </div>
+
+                          <div className="text-[11px] text-slate-400 space-y-0.5 mt-2">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Categories ({dash.factions.length}):</span>
+                            <p className="truncate text-slate-300">
+                              {dash.factions.map(f => `${f.name} (${f.system})`).join(', ')}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* 2. LEADERBOARD TAB */}
+          {currentTab === 'leaderboard' && (
+            <div className="space-y-6">
+              
+              {/* Leaderboard Navigation Sub-Header */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <span>🏆</span> Dashboard Output Rankings
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Compare model output across your created dashboards.</p>
+                </div>
+
+                {/* Sub-Tab Navigation Switcher */}
+                <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 w-full sm:w-auto">
+                  <button
+                    onClick={() => setLeaderboardSubTab('monthly')}
+                    className={`touch-target flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      leaderboardSubTab === 'monthly' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    📅 Monthly
+                  </button>
+                  <button
+                    onClick={() => setLeaderboardSubTab('yearly')}
+                    className={`touch-target flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      leaderboardSubTab === 'yearly' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🎆 Yearly
+                  </button>
+                  <button
+                    onClick={() => setLeaderboardSubTab('global')}
+                    className={`touch-target flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      leaderboardSubTab === 'global' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🥧 Global (Pie Chart)
+                  </button>
+                </div>
+              </div>
+
+              {/* MONTHLY LEADERBOARD TABLE */}
+              {leaderboardSubTab === 'monthly' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4 shadow-xl">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Monthly Output Rankings</h3>
+                      <p className="text-xs text-slate-400">Total models painted from WIP/Grey to Painted this month.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {monthlyLeaderboard.map((dash, idx) => {
+                      const rank = idx + 1;
+                      const isActive = dash.id === activeDashboardId;
+                      return (
+                        <div 
+                          key={dash.id} 
+                          className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
+                            isActive 
+                              ? 'bg-emerald-950/30 border-emerald-500/60 shadow-lg' 
+                              : 'bg-slate-950 border-slate-800/80'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
+                              rank === 1 ? 'bg-amber-500 text-slate-950' :
+                              rank === 2 ? 'bg-slate-300 text-slate-950' :
+                              rank === 3 ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              #{rank}
+                            </div>
+                            <span className="text-2xl">{dash.avatar}</span>
+                            <div>
+                              <div className="font-bold text-white text-sm flex items-center gap-2">
+                                <span>{dash.name}</span>
+                                {isActive && (
+                                  <span className="text-[9px] bg-emerald-500 text-slate-950 px-1.5 py-0.2 rounded font-extrabold uppercase">
+                                    Active
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <div className="text-base font-black text-emerald-400">+{dash.monthlyCompleted}</div>
+                            <div className="text-[9px] uppercase font-bold text-slate-500">Models Finished</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* YEARLY LEADERBOARD TABLE */}
+              {leaderboardSubTab === 'yearly' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4 shadow-xl">
+                  <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Annual Output Rankings</h3>
+                      <p className="text-xs text-slate-400">Cumulative models completed throughout the calendar year.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {yearlyLeaderboard.map((dash, idx) => {
+                      const rank = idx + 1;
+                      const isActive = dash.id === activeDashboardId;
+                      return (
+                        <div 
+                          key={dash.id} 
+                          className={`p-3.5 rounded-xl border flex items-center justify-between transition-all ${
+                            isActive 
+                              ? 'bg-emerald-950/30 border-emerald-500/60 shadow-lg' 
+                              : 'bg-slate-950 border-slate-800/80'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
+                              rank === 1 ? 'bg-amber-500 text-slate-950' :
+                              rank === 2 ? 'bg-slate-300 text-slate-950' :
+                              rank === 3 ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              #{rank}
+                            </div>
+                            <span className="text-2xl">{dash.avatar}</span>
+                            <div>
+                              <div className="font-bold text-white text-sm flex items-center gap-2">
+                                <span>{dash.name}</span>
+                                {isActive && (
+                                  <span className="text-[9px] bg-emerald-500 text-slate-950 px-1.5 py-0.2 rounded font-extrabold uppercase">
+                                    Active
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <div className="text-base font-black text-emerald-400">+{dash.yearlyCompleted}</div>
+                            <div className="text-[9px] uppercase font-bold text-slate-500">Models Finished</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* GLOBAL PIE CHART VIEW */}
+              {leaderboardSubTab === 'global' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-6 shadow-xl">
+                  <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Aggregated Collection Breakdown</h3>
+                      <p className="text-xs text-slate-400">Model status distribution across all {dashboards.length} dashboards.</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-black text-white">{globalTotalModels}</div>
+                      <div className="text-[10px] text-slate-400 uppercase font-bold">Total Models</div>
+                    </div>
+                  </div>
+
+                  {/* Chart Container */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                    <div className="md:col-span-7 h-64 sm:h-80 relative bg-slate-950 rounded-2xl p-4 border border-slate-800">
+                      <canvas ref={globalPieRef}></canvas>
+                    </div>
+
+                    <div className="md:col-span-5 space-y-3">
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 border-l-4 border-l-emerald-500">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-300">Finished / Painted</span>
+                          <span className="text-base font-black text-emerald-400">{globalTotalPainted}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          {globalTotalModels ? ((globalTotalPainted / globalTotalModels) * 100).toFixed(1) : 0}% of total aggregate collection
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 border-l-4 border-l-amber-500">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-300">In Progress (WIP)</span>
+                          <span className="text-base font-black text-amber-400">{globalTotalWip}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          {globalTotalModels ? ((globalTotalWip / globalTotalModels) * 100).toFixed(1) : 0}% of total aggregate collection
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 border-l-4 border-l-red-500">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-300">Backlog (Unpainted Grey)</span>
+                          <span className="text-base font-black text-red-400">{globalTotalBacklog}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          {globalTotalModels ? ((globalTotalBacklog / globalTotalModels) * 100).toFixed(1) : 0}% of total aggregate collection
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* 3. PERSONAL DASHBOARD WORKSPACE PAGE */}
+          {currentTab === 'personal' && activeDash && (
+            <div className="space-y-6">
+
+              {/* Header & Sharing Banner */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{activeDash.avatar}</span>
+                    <h2 className="text-xl font-bold text-white">{activeDash.name}</h2>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">Manage custom categories, update progress, and log transitions for this dashboard.</p>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-xl flex items-center gap-3 w-full sm:w-auto justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-white">Public Community Sharing</div>
+                    <div className="text-[10px] text-slate-400">
+                      {activeDash.isPublic ? 'Visible on home overview' : 'Hidden from public list'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleTogglePublic}
+                    className={`touch-target px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all ${
+                      activeDash.isPublic ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {activeDash.isPublic ? '🌐 Shared Publicly' : '🔒 Keep Private'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Personal Quick Stats Carousel */}
+              <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-5 gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 scrollbar-none">
+                <div className="min-w-[130px] flex-1 bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4">
+                  <div className="text-slate-400 text-[10px] uppercase font-semibold">Done Rate</div>
+                  <div className="text-xl sm:text-2xl font-black mt-0.5 text-emerald-400">{completionRate}%</div>
+                </div>
+
+                <div className="min-w-[130px] flex-1 bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4">
+                  <div className="text-slate-400 text-[10px] uppercase font-semibold">Total Models</div>
+                  <div className="text-xl sm:text-2xl font-black mt-0.5 text-white">{totalCollection}</div>
+                </div>
+
+                <div className="min-w-[130px] flex-1 bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4 border-l-4 border-l-emerald-500">
+                  <div className="text-slate-400 text-[10px] uppercase font-semibold">Painted</div>
+                  <div className="text-xl sm:text-2xl font-black mt-0.5 text-emerald-400">{totalPainted}</div>
+                </div>
+
+                <div className="min-w-[130px] flex-1 bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4 border-l-4 border-l-amber-500">
+                  <div className="text-slate-400 text-[10px] uppercase font-semibold">WIP</div>
+                  <div className="text-xl sm:text-2xl font-black mt-0.5 text-amber-400">{totalWip}</div>
+                </div>
+
+                <div className="min-w-[130px] flex-1 bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4 border-l-4 border-l-red-500">
+                  <div className="text-slate-400 text-[10px] uppercase font-semibold">Backlog</div>
+                  <div className="text-xl sm:text-2xl font-black mt-0.5 text-red-400">{totalBacklog}</div>
+                </div>
+              </div>
+
+              {/* Category Management Modal Drawer */}
+              {showManageModal && (
+                <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 space-y-5 shadow-2xl">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span>🏷️</span> Add or Remove Categories ({activeDash.name})
+                      </h2>
+                      <button 
+                        onClick={() => setShowManageModal(false)}
+                        className="text-slate-400 hover:text-white font-bold text-xl px-2"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleAddCategory} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-3">
+                      <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Add Category / Army</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Name (e.g. Star Wars Legion, Tyranids)" 
+                          value={newCategoryName} 
+                          onChange={e => setNewCategoryName(e.target.value)}
+                          className="touch-target w-full bg-slate-900 border border-slate-800 rounded-lg px-3 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <input 
+                          type="text" 
+                          placeholder="System/Game (Optional)" 
+                          value={newCategorySystem} 
+                          onChange={e => setNewCategorySystem(e.target.value)}
+                          className="touch-target w-full bg-slate-900 border border-slate-800 rounded-lg px-3 text-xs text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <button 
+                        type="submit"
+                        className="touch-target w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all"
+                      >
+                        + Add to Active Dashboard
+                      </button>
+                    </form>
+
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      <div className="text-xs font-semibold text-slate-400 uppercase">Categories ({activeDash.factions.length})</div>
+                      {activeDash.factions.map(f => (
+                        <div key={f.id} className="bg-slate-950 border border-slate-800/80 rounded-xl p-3 flex justify-between items-center">
+                          <div>
+                            <div className="font-bold text-white text-sm">{f.name}</div>
+                            <div className="text-[10px] text-slate-400">{f.system || 'Custom System'} • {f.painted + f.wip + f.backlog} models total</div>
+                          </div>
+                          <button 
+                            onClick={() => handleRemoveCategory(f.id, f.name)}
+                            className="touch-target text-red-400 hover:text-red-300 text-xs font-semibold px-2 rounded hover:bg-red-950/40"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800 text-right">
+                      <button 
+                        onClick={() => setShowManageModal(false)}
+                        className="touch-target bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-5 rounded-xl"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Personal Spotlight Card */}
+              {activeDash.featuredModel && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl grid grid-cols-1 md:grid-cols-12">
+                  <div className="md:col-span-5 h-48 sm:h-64 md:h-auto relative bg-slate-950">
+                    <img 
+                      src={activeDash.featuredModel.imageUrl} 
+                      alt={activeDash.featuredModel.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute top-3 left-3 bg-emerald-500/90 text-slate-950 text-[10px] sm:text-xs font-bold uppercase px-2.5 py-1 rounded-full backdrop-blur-sm">
+                      ⭐ Featured Spotlight
+                    </span>
+                  </div>
+                  <div className="md:col-span-7 p-4 sm:p-6 flex flex-col justify-between space-y-3">
+                    <div>
+                      <div className="text-[10px] sm:text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-0.5">
+                        {activeDash.featuredModel.faction} • {activeDash.featuredModel.date}
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">{activeDash.featuredModel.title}</h2>
+                      <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-xs sm:text-sm text-slate-300">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Recipe / Notes:</span>
+                        <p className="italic leading-relaxed">{activeDash.featuredModel.notes}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Direct Steppers */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-base sm:text-lg font-bold text-white">Direct Steppers</h2>
+                    <p className="text-xs text-slate-400">Quick adjust numbers per category.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowManageModal(true)}
+                    className="touch-target bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-700"
+                  >
+                    ⚙️ Manage Categories
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {activeDash.factions.map(f => (
+                    <div key={f.id} className="bg-slate-950 border border-slate-800/80 rounded-xl p-3 space-y-2">
+                      <div className="font-bold text-white text-sm border-b border-slate-800/60 pb-1.5 flex justify-between items-center">
+                        <div>
+                          <span>{f.name}</span>
+                          {f.system && <span className="block text-[9px] font-normal text-slate-500">{f.system}</span>}
+                        </div>
+                        <span className="text-[10px] font-normal text-slate-400">Total: {f.painted + f.wip + f.backlog}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-emerald-400 font-semibold">Painted</span>
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => handleStepperAdjust(f.name, 'painted', -1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">-</button>
+                          <span className="w-7 text-center font-bold text-white text-sm">{f.painted}</span>
+                          <button onClick={() => handleStepperAdjust(f.name, 'painted', 1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">+</button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-amber-400 font-semibold">WIP</span>
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => handleStepperAdjust(f.name, 'wip', -1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">-</button>
+                          <span className="w-7 text-center font-bold text-white text-sm">{f.wip}</span>
+                          <button onClick={() => handleStepperAdjust(f.name, 'wip', 1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">+</button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-red-400 font-semibold">Grey</span>
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => handleStepperAdjust(f.name, 'backlog', -1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">-</button>
+                          <span className="w-7 text-center font-bold text-white text-sm">{f.backlog}</span>
+                          <button onClick={() => handleStepperAdjust(f.name, 'backlog', 1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">+</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Charts */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <h2 className="text-sm font-semibold mb-2 text-white">Status Breakdown</h2>
+                  <div className="h-48 sm:h-56 relative">
+                    <canvas ref={donutRef}></canvas>
+                  </div>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <h2 className="text-sm font-semibold mb-2 text-white">Category Progress</h2>
+                  <div className="h-48 sm:h-56 relative">
+                    <canvas ref={barRef}></canvas>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bucket Transition Form */}
+              <div ref={formRef} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold text-white">Log Transition</h2>
+                  <p className="text-slate-400 text-xs">Move models between buckets accurately.</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Category / Army</label>
+                      <select 
+                        value={form.faction} 
+                        onChange={e => setForm({ ...form, faction: e.target.value })}
+                        className="touch-target w-full bg-slate-950 border border-slate-800 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        {activeDash.factions.map(f => (
+                          <option key={f.id} value={f.name}>{f.name} {f.system ? `(${f.system})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Transition Action</label>
+                      <select 
+                        value={form.transition} 
+                        onChange={e => setForm({ ...form, transition: e.target.value })}
+                        className="touch-target w-full bg-slate-950 border border-slate-800 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="wip_to_painted">🎨 Finished Painting (WIP ➔ Painted)</option>
+                        <option value="backlog_to_wip">✂️ Started Assembling (Grey ➔ WIP)</option>
+                        <option value="backlog_to_painted">🚀 Direct Finish (Grey ➔ Painted)</option>
+                        <option value="new_purchase">📦 New Purchase (+ To Grey)</option>
+                        <option value="sold_trim">🗑️ Trimmed / Sold (- From Grey)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Model Count</label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        value={form.amount} 
+                        onChange={e => setForm({ ...form, amount: e.target.value })}
+                        className="touch-target w-full bg-slate-950 border border-slate-800 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Model / Squad Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Ork Boyz Squad" 
+                        value={form.title} 
+                        onChange={e => setForm({ ...form, title: e.target.value })}
+                        className="touch-target w-full bg-slate-950 border border-slate-800 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Photo</label>
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-slate-400 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-emerald-400"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">Notes / Recipe</label>
+                    <textarea 
+                      rows="2" 
+                      placeholder="Paints or techniques used..." 
+                      value={form.notes} 
+                      onChange={e => setForm({ ...form, notes: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    ></textarea>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                      <input 
+                        type="checkbox" 
+                        checked={form.setFeatured} 
+                        onChange={e => setForm({ ...form, setFeatured: e.target.checked })}
+                        className="w-4 h-4 rounded bg-slate-950 border-slate-800 text-emerald-500"
+                      />
+                      <span>Set as Featured Spotlight</span>
+                    </label>
+
+                    <button 
+                      type="submit" 
+                      className="touch-target w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 rounded-xl transition-all shadow-lg"
+                    >
+                      Log Transition
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Showcase Stream */}
+              <div className="space-y-3">
+                <h2 className="text-lg font-bold text-white">Showcase Stream</h2>
+                {activeDash.gallery.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {activeDash.gallery.map(item => (
+                      <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-md flex flex-col justify-between">
+                        <div>
+                          <div className="h-40 sm:h-48 bg-slate-950 overflow-hidden relative">
+                            <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                            <span className="absolute top-2 right-2 bg-slate-900/90 backdrop-blur-md text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-700">
+                              +{item.count} Transitioned
+                            </span>
+                          </div>
+                          <div className="p-3 space-y-1">
+                            <div className="text-[10px] font-semibold text-emerald-400 uppercase">{item.faction} • {item.date}</div>
+                            <h3 className="font-bold text-white text-base leading-snug">{item.title}</h3>
+                            <p className="text-xs text-slate-400 italic line-clamp-2">{item.notes}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">No completed transitions logged in this dashboard yet.</p>
+                )}
+              </div>
+
+              {/* Mobile Floating CTA */}
+              <div className="fixed bottom-4 right-4 sm:hidden z-40">
+                <button 
+                  onClick={scrollToForm}
+                  className="touch-target bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-extrabold px-5 rounded-full shadow-2xl flex items-center gap-2 border border-emerald-300"
+                >
+                  <span>✏️</span> Log Progress
+                </button>
+              </div>
+
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
