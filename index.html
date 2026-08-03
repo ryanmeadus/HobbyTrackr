@@ -52,7 +52,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    const STORAGE_KEY = 'hobbytrackr_local_state_v1';
+    const STORAGE_KEY = 'hobbytrackr_local_state_v2';
 
     const defaultDashboards = [
       {
@@ -90,19 +90,22 @@
     ];
 
     function App() {
-      // Main View Navigation: 'home' | 'leaderboard' | 'personal'
       const [currentTab, setCurrentTab] = useState('home');
-
-      // Leaderboard Sub-Tab Navigation: 'monthly' | 'yearly' | 'global'
       const [leaderboardSubTab, setLeaderboardSubTab] = useState('monthly');
 
-      // Active Dashboard Management State initialized from localStorage
+      // Initialize state safely from localStorage with fallback validation
       const [dashboards, setDashboards] = useState(() => {
         try {
           const saved = localStorage.getItem(STORAGE_KEY);
           if (saved) {
             const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              // Ensure every dashboard has valid factions array
+              return parsed.map(d => ({
+                ...d,
+                factions: Array.isArray(d.factions) ? d.factions : []
+              }));
+            }
           }
         } catch (e) {
           console.error('Error loading local storage data:', e);
@@ -115,7 +118,6 @@
       const [newDashboardName, setNewDashboardName] = useState('');
       const [newDashboardAvatar, setNewDashboardAvatar] = useState('🛡️');
 
-      // Save to localStorage whenever dashboards change
       const updateDashboards = (updatedDashboards) => {
         setDashboards(updatedDashboards);
         try {
@@ -125,16 +127,15 @@
         }
       };
 
-      // Helper to get active dashboard
-      const activeDash = dashboards.find(d => d.id === activeDashboardId) || dashboards[0];
+      const activeDash = dashboards.find(d => d.id === activeDashboardId) || dashboards[0] || defaultDashboards[0];
+      const activeFactions = activeDash?.factions || [];
 
-      // Form State for Log Transition
       const [newCategoryName, setNewCategoryName] = useState('');
       const [newCategorySystem, setNewCategorySystem] = useState('');
       const [showManageModal, setShowManageModal] = useState(false);
 
       const [form, setForm] = useState({
-        faction: activeDash?.factions[0]?.name || '',
+        faction: activeFactions[0]?.name || '',
         transition: 'wip_to_painted',
         amount: 1,
         title: '',
@@ -145,10 +146,9 @@
 
       const formRef = useRef(null);
 
-      // Keep form faction aligned with current active dashboard categories
       useEffect(() => {
-        if (activeDash && activeDash.factions.length > 0) {
-          setForm(prev => ({ ...prev, faction: activeDash.factions[0].name }));
+        if (activeFactions.length > 0) {
+          setForm(prev => ({ ...prev, faction: activeFactions[0].name }));
         }
       }, [activeDashboardId]);
 
@@ -158,7 +158,6 @@
         }
       };
 
-      // Create New Dashboard
       const handleCreateDashboard = (e) => {
         e.preventDefault();
         if (!newDashboardName.trim()) return;
@@ -214,7 +213,7 @@
 
         const updated = dashboards.map(d => {
           if (d.id === activeDashboardId) {
-            return { ...d, factions: [...d.factions, createdCategory] };
+            return { ...d, factions: [...(d.factions || []), createdCategory] };
           }
           return d;
         });
@@ -225,7 +224,7 @@
       };
 
       const handleRemoveCategory = (catId, catName) => {
-        if (activeDash.factions.length <= 1) {
+        if (activeFactions.length <= 1) {
           alert('You must keep at least one category/army per dashboard.');
           return;
         }
@@ -233,7 +232,7 @@
         if (confirm(`Are you sure you want to delete "${catName}"?`)) {
           const updated = dashboards.map(d => {
             if (d.id === activeDashboardId) {
-              const updatedFactions = d.factions.filter(f => f.id !== catId);
+              const updatedFactions = (d.factions || []).filter(f => f.id !== catId);
               return { ...d, factions: updatedFactions };
             }
             return d;
@@ -245,9 +244,9 @@
       const handleStepperAdjust = (factionName, bucket, delta) => {
         const updated = dashboards.map(d => {
           if (d.id === activeDashboardId) {
-            const updatedFactions = d.factions.map(f => {
+            const updatedFactions = (d.factions || []).map(f => {
               if (f.name === factionName) {
-                return { ...f, [bucket]: Math.max(0, f[bucket] + delta) };
+                return { ...f, [bucket]: Math.max(0, (f[bucket] || 0) + delta) };
               }
               return f;
             });
@@ -285,12 +284,14 @@
 
         const updated = dashboards.map(d => {
           if (d.id === activeDashboardId) {
-            let mComp = d.monthlyCompleted;
-            let yComp = d.yearlyCompleted;
+            let mComp = d.monthlyCompleted || 0;
+            let yComp = d.yearlyCompleted || 0;
 
-            const updatedFactions = d.factions.map(f => {
+            const updatedFactions = (d.factions || []).map(f => {
               if (f.name === form.faction) {
-                let { painted, wip, backlog } = f;
+                let painted = f.painted || 0;
+                let wip = f.wip || 0;
+                let backlog = f.backlog || 0;
 
                 switch (form.transition) {
                   case 'new_purchase':
@@ -327,7 +328,7 @@
             const isFinishing = form.transition === 'wip_to_painted' || form.transition === 'backlog_to_painted';
             const imgToUse = form.imageUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop';
 
-            let updatedGallery = d.gallery;
+            let updatedGallery = d.gallery || [];
             let updatedFeatured = d.featuredModel;
 
             if (form.title || isFinishing) {
@@ -341,7 +342,7 @@
                 notes: form.notes || 'No recipe notes recorded.',
                 imageUrl: imgToUse
               };
-              updatedGallery = [newEntry, ...d.gallery];
+              updatedGallery = [newEntry, ...updatedGallery];
 
               if (form.setFeatured) {
                 updatedFeatured = {
@@ -369,7 +370,7 @@
         updateDashboards(updated);
 
         setForm({
-          faction: activeDash?.factions[0]?.name || '',
+          faction: activeFactions[0]?.name || '',
           transition: 'wip_to_painted',
           amount: 1,
           title: '',
@@ -379,30 +380,25 @@
         });
       };
 
-      // Current Active Dashboard Totals
-      const totalPainted = activeDash ? activeDash.factions.reduce((acc, f) => acc + f.painted, 0) : 0;
-      const totalWip = activeDash ? activeDash.factions.reduce((acc, f) => acc + f.wip, 0) : 0;
-      const totalBacklog = activeDash ? activeDash.factions.reduce((acc, f) => acc + f.backlog, 0) : 0;
+      const totalPainted = activeFactions.reduce((acc, f) => acc + (f.painted || 0), 0);
+      const totalWip = activeFactions.reduce((acc, f) => acc + (f.wip || 0), 0);
+      const totalBacklog = activeFactions.reduce((acc, f) => acc + (f.backlog || 0), 0);
       const totalCollection = totalPainted + totalWip + totalBacklog;
       const completionRate = totalCollection ? ((totalPainted / totalCollection) * 100).toFixed(1) : 0;
 
-      // Aggregate Global Totals across ALL custom dashboards
-      const globalTotalModels = dashboards.reduce((acc, d) => acc + d.factions.reduce((a, f) => a + f.painted + f.wip + f.backlog, 0), 0);
-      const globalTotalPainted = dashboards.reduce((acc, d) => acc + d.factions.reduce((a, f) => a + f.painted, 0), 0);
-      const globalTotalWip = dashboards.reduce((acc, d) => acc + d.factions.reduce((a, f) => a + f.wip, 0), 0);
-      const globalTotalBacklog = dashboards.reduce((acc, d) => acc + d.factions.reduce((a, f) => a + f.backlog, 0), 0);
+      const globalTotalModels = dashboards.reduce((acc, d) => acc + (d.factions || []).reduce((a, f) => a + (f.painted || 0) + (f.wip || 0) + (f.backlog || 0), 0), 0);
+      const globalTotalPainted = dashboards.reduce((acc, d) => acc + (d.factions || []).reduce((a, f) => a + (f.painted || 0), 0), 0);
+      const globalTotalWip = dashboards.reduce((acc, d) => acc + (d.factions || []).reduce((a, f) => a + (f.wip || 0), 0), 0);
+      const globalTotalBacklog = dashboards.reduce((acc, d) => acc + (d.factions || []).reduce((a, f) => a + (f.backlog || 0), 0), 0);
 
-      // Featured model spotlight selection from active public dashboards
       const publicDashboardsWithFeatured = dashboards.filter(d => d.isPublic && d.featuredModel);
       const dailyFeaturedUser = publicDashboardsWithFeatured.length > 0 ? publicDashboardsWithFeatured[0] : null;
 
-      // Personal Dashboard Charts Ref
       const donutRef = useRef(null);
       const barRef = useRef(null);
       const donutInstance = useRef(null);
       const barInstance = useRef(null);
 
-      // Global Pie Chart Ref
       const globalPieRef = useRef(null);
       const globalPieInstance = useRef(null);
 
@@ -434,11 +430,11 @@
             barInstance.current = new Chart(barRef.current, {
               type: 'bar',
               data: {
-                labels: activeDash.factions.map(f => f.name),
+                labels: activeFactions.map(f => f.name),
                 datasets: [
-                  { label: 'Painted', data: activeDash.factions.map(f => f.painted), backgroundColor: '#22c55e' },
-                  { label: 'WIP', data: activeDash.factions.map(f => f.wip), backgroundColor: '#f59e0b' },
-                  { label: 'Backlog', data: activeDash.factions.map(f => f.backlog), backgroundColor: '#ef4444' }
+                  { label: 'Painted', data: activeFactions.map(f => f.painted || 0), backgroundColor: '#22c55e' },
+                  { label: 'WIP', data: activeFactions.map(f => f.wip || 0), backgroundColor: '#f59e0b' },
+                  { label: 'Backlog', data: activeFactions.map(f => f.backlog || 0), backgroundColor: '#ef4444' }
                 ]
               },
               options: {
@@ -455,7 +451,6 @@
         }
       }, [activeDash, currentTab, totalPainted, totalWip, totalBacklog]);
 
-      // Global Pie Chart Render
       useEffect(() => {
         if (currentTab === 'leaderboard' && leaderboardSubTab === 'global') {
           if (globalPieInstance.current) globalPieInstance.current.destroy();
@@ -493,14 +488,12 @@
         }
       }, [currentTab, leaderboardSubTab, globalTotalPainted, globalTotalWip, globalTotalBacklog, globalTotalModels]);
 
-      // Leaderboard Data Calculation
-      const monthlyLeaderboard = [...dashboards].sort((a, b) => b.monthlyCompleted - a.monthlyCompleted);
-      const yearlyLeaderboard = [...dashboards].sort((a, b) => b.yearlyCompleted - a.yearlyCompleted);
+      const monthlyLeaderboard = [...dashboards].sort((a, b) => (b.monthlyCompleted || 0) - (a.monthlyCompleted || 0));
+      const yearlyLeaderboard = [...dashboards].sort((a, b) => (b.yearlyCompleted || 0) - (a.yearlyCompleted || 0));
 
       return (
         <div className="max-w-7xl mx-auto px-4 py-4 sm:p-6 space-y-6">
           
-          {/* Main Top Navigation Header */}
           <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
@@ -509,7 +502,6 @@
               <p className="text-slate-400 text-xs sm:text-sm">Manage multiple custom dashboards, track progress & view rankings</p>
             </div>
 
-            {/* Dashboard Selector & Switcher Tabs */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <div className="flex items-center gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
                 <span className="text-xs text-slate-400 font-bold pl-2">Dashboard:</span>
@@ -532,7 +524,6 @@
                 </button>
               </div>
 
-              {/* Navigation Tabs */}
               <div className="flex items-center gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
                 <button
                   onClick={() => setCurrentTab('home')}
@@ -564,7 +555,6 @@
             </div>
           </header>
 
-          {/* DASHBOARD CREATION & MANAGEMENT MODAL */}
           {showDashboardModal && (
             <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
               <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 space-y-5 shadow-2xl">
@@ -609,7 +599,7 @@
                         <span className="text-xl">{d.avatar}</span>
                         <div>
                           <div className="font-bold text-white text-sm">{d.name}</div>
-                          <div className="text-[10px] text-slate-400">{d.factions.length} categories tracked</div>
+                          <div className="text-[10px] text-slate-400">{(d.factions || []).length} categories tracked</div>
                         </div>
                       </div>
                       <button 
@@ -634,11 +624,8 @@
             </div>
           )}
 
-          {/* 1. COMMUNITY HOME PAGE */}
           {currentTab === 'home' && (
             <div className="space-y-6">
-              
-              {/* Daily Spotlight Hero Banner */}
               {dailyFeaturedUser && dailyFeaturedUser.featuredModel ? (
                 <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/40 border border-emerald-500/30 rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 md:grid-cols-12">
                   <div className="md:col-span-5 h-56 sm:h-72 md:h-auto relative bg-slate-950">
@@ -686,7 +673,6 @@
                 </div>
               )}
 
-              {/* Dashboards Grid Overview */}
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -702,9 +688,10 @@
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {dashboards.map(dash => {
-                    const dashPainted = dash.factions.reduce((a, f) => a + f.painted, 0);
-                    const dashWip = dash.factions.reduce((a, f) => a + f.wip, 0);
-                    const dashBacklog = dash.factions.reduce((a, f) => a + f.backlog, 0);
+                    const dashFactions = dash.factions || [];
+                    const dashPainted = dashFactions.reduce((a, f) => a + (f.painted || 0), 0);
+                    const dashWip = dashFactions.reduce((a, f) => a + (f.wip || 0), 0);
+                    const dashBacklog = dashFactions.reduce((a, f) => a + (f.backlog || 0), 0);
                     const isActive = dash.id === activeDashboardId;
 
                     return (
@@ -755,9 +742,9 @@
                           </div>
 
                           <div className="text-[11px] text-slate-400 space-y-0.5 mt-2">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Categories ({dash.factions.length}):</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase block">Categories ({dashFactions.length}):</span>
                             <p className="truncate text-slate-300">
-                              {dash.factions.map(f => `${f.name} (${f.system})`).join(', ')}
+                              {dashFactions.map(f => `${f.name} (${f.system})`).join(', ')}
                             </p>
                           </div>
                         </div>
@@ -766,14 +753,11 @@
                   })}
                 </div>
               </div>
-
             </div>
           )}
 
-          {/* 2. LEADERBOARD TAB */}
           {currentTab === 'leaderboard' && (
             <div className="space-y-6">
-              
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -810,7 +794,6 @@
                 </div>
               </div>
 
-              {/* MONTHLY LEADERBOARD TABLE */}
               {leaderboardSubTab === 'monthly' && (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4 shadow-xl">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-3">
@@ -855,7 +838,7 @@
                           </div>
 
                           <div className="text-right">
-                            <div className="text-base font-black text-emerald-400">+{dash.monthlyCompleted}</div>
+                            <div className="text-base font-black text-emerald-400">+{dash.monthlyCompleted || 0}</div>
                             <div className="text-[9px] uppercase font-bold text-slate-500">Models Finished</div>
                           </div>
                         </div>
@@ -865,7 +848,6 @@
                 </div>
               )}
 
-              {/* YEARLY LEADERBOARD TABLE */}
               {leaderboardSubTab === 'yearly' && (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4 shadow-xl">
                   <div className="flex justify-between items-center border-b border-slate-800 pb-3">
@@ -910,7 +892,7 @@
                           </div>
 
                           <div className="text-right">
-                            <div className="text-base font-black text-emerald-400">+{dash.yearlyCompleted}</div>
+                            <div className="text-base font-black text-emerald-400">+{dash.yearlyCompleted || 0}</div>
                             <div className="text-[9px] uppercase font-bold text-slate-500">Models Finished</div>
                           </div>
                         </div>
@@ -920,7 +902,6 @@
                 </div>
               )}
 
-              {/* GLOBAL PIE CHART VIEW */}
               {leaderboardSubTab === 'global' && (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-6 shadow-xl">
                   <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
@@ -973,14 +954,11 @@
                   </div>
                 </div>
               )}
-
             </div>
           )}
 
-          {/* 3. PERSONAL DASHBOARD WORKSPACE PAGE */}
           {currentTab === 'personal' && activeDash && (
             <div className="space-y-6">
-
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -1008,7 +986,6 @@
                 </div>
               </div>
 
-              {/* Personal Quick Stats Carousel */}
               <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-5 gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:pb-0 scrollbar-none">
                 <div className="min-w-[130px] flex-1 bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4">
                   <div className="text-slate-400 text-[10px] uppercase font-semibold">Done Rate</div>
@@ -1036,7 +1013,6 @@
                 </div>
               </div>
 
-              {/* Category Management Modal Drawer */}
               {showManageModal && (
                 <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 space-y-5 shadow-2xl">
@@ -1079,12 +1055,12 @@
                     </form>
 
                     <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                      <div className="text-xs font-semibold text-slate-400 uppercase">Categories ({activeDash.factions.length})</div>
-                      {activeDash.factions.map(f => (
+                      <div className="text-xs font-semibold text-slate-400 uppercase">Categories ({activeFactions.length})</div>
+                      {activeFactions.map(f => (
                         <div key={f.id} className="bg-slate-950 border border-slate-800/80 rounded-xl p-3 flex justify-between items-center">
                           <div>
                             <div className="font-bold text-white text-sm">{f.name}</div>
-                            <div className="text-[10px] text-slate-400">{f.system || 'Custom System'} • {f.painted + f.wip + f.backlog} models total</div>
+                            <div className="text-[10px] text-slate-400">{f.system || 'Custom System'} • {(f.painted || 0) + (f.wip || 0) + (f.backlog || 0)} models total</div>
                           </div>
                           <button 
                             onClick={() => handleRemoveCategory(f.id, f.name)}
@@ -1108,7 +1084,6 @@
                 </div>
               )}
 
-              {/* Personal Spotlight Card */}
               {activeDash.featuredModel && (
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl grid grid-cols-1 md:grid-cols-12">
                   <div className="md:col-span-5 h-48 sm:h-64 md:h-auto relative bg-slate-950">
@@ -1136,7 +1111,6 @@
                 </div>
               )}
 
-              {/* Direct Steppers */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-3">
                 <div className="flex justify-between items-center">
                   <div>
@@ -1152,21 +1126,21 @@
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {activeDash.factions.map(f => (
+                  {activeFactions.map(f => (
                     <div key={f.id} className="bg-slate-950 border border-slate-800/80 rounded-xl p-3 space-y-2">
                       <div className="font-bold text-white text-sm border-b border-slate-800/60 pb-1.5 flex justify-between items-center">
                         <div>
                           <span>{f.name}</span>
                           {f.system && <span className="block text-[9px] font-normal text-slate-500">{f.system}</span>}
                         </div>
-                        <span className="text-[10px] font-normal text-slate-400">Total: {f.painted + f.wip + f.backlog}</span>
+                        <span className="text-[10px] font-normal text-slate-400">Total: {(f.painted || 0) + (f.wip || 0) + (f.backlog || 0)}</span>
                       </div>
 
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-emerald-400 font-semibold">Painted</span>
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => handleStepperAdjust(f.name, 'painted', -1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">-</button>
-                          <span className="w-7 text-center font-bold text-white text-sm">{f.painted}</span>
+                          <span className="w-7 text-center font-bold text-white text-sm">{f.painted || 0}</span>
                           <button onClick={() => handleStepperAdjust(f.name, 'painted', 1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">+</button>
                         </div>
                       </div>
@@ -1175,7 +1149,7 @@
                         <span className="text-amber-400 font-semibold">WIP</span>
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => handleStepperAdjust(f.name, 'wip', -1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">-</button>
-                          <span className="w-7 text-center font-bold text-white text-sm">{f.wip}</span>
+                          <span className="w-7 text-center font-bold text-white text-sm">{f.wip || 0}</span>
                           <button onClick={() => handleStepperAdjust(f.name, 'wip', 1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">+</button>
                         </div>
                       </div>
@@ -1184,7 +1158,7 @@
                         <span className="text-red-400 font-semibold">Grey</span>
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => handleStepperAdjust(f.name, 'backlog', -1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">-</button>
-                          <span className="w-7 text-center font-bold text-white text-sm">{f.backlog}</span>
+                          <span className="w-7 text-center font-bold text-white text-sm">{f.backlog || 0}</span>
                           <button onClick={() => handleStepperAdjust(f.name, 'backlog', 1)} className="touch-target w-9 h-9 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 font-bold text-base flex items-center justify-center">+</button>
                         </div>
                       </div>
@@ -1193,7 +1167,6 @@
                 </div>
               </div>
 
-              {/* Charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
                   <h2 className="text-sm font-semibold mb-2 text-white">Status Breakdown</h2>
@@ -1210,7 +1183,6 @@
                 </div>
               </div>
 
-              {/* Bucket Transition Form */}
               <div ref={formRef} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4">
                 <div>
                   <h2 className="text-lg sm:text-xl font-bold text-white">Log Transition</h2>
@@ -1226,7 +1198,7 @@
                         onChange={e => setForm({ ...form, faction: e.target.value })}
                         className="touch-target w-full bg-slate-950 border border-slate-800 rounded-xl px-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       >
-                        {activeDash.factions.map(f => (
+                        {activeFactions.map(f => (
                           <option key={f.id} value={f.name}>{f.name} {f.system ? `(${f.system})` : ''}</option>
                         ))}
                       </select>
@@ -1314,10 +1286,9 @@
                 </form>
               </div>
 
-              {/* Showcase Stream */}
               <div className="space-y-3">
                 <h2 className="text-lg font-bold text-white">Showcase Stream</h2>
-                {activeDash.gallery.length > 0 ? (
+                {(activeDash.gallery || []).length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {activeDash.gallery.map(item => (
                       <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-md flex flex-col justify-between">
@@ -1342,7 +1313,6 @@
                 )}
               </div>
 
-              {/* Mobile Floating CTA */}
               <div className="fixed bottom-4 right-4 sm:hidden z-40">
                 <button 
                   onClick={scrollToForm}
