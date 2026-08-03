@@ -51,6 +51,67 @@
   <div id="root"></div>
 
   <script type="text/babel">
+    // Initialize Supabase with your credentials
+const SUPABASE_URL = 'https://jvuygmfhnrjdpohtbngp.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_8h4LHu-O3xs1noABk2CwtA_uL7q-hAG';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function App() {
+  const [dashboards, setDashboards] = React.useState([]);
+  const [isSyncing, setIsSyncing] = React.useState(false);
+
+  // 1. Fetch initial data and listen for live changes from other devices
+  React.useEffect(() => {
+    async function fetchInitialData() {
+      const { data, error } = await supabase
+        .from('app_state')
+        .select('payload')
+        .eq('id', 'global_hobby_data')
+        .single();
+
+      if (data && data.payload) {
+        setDashboards(data.payload);
+      }
+    }
+
+    fetchInitialData();
+
+    const channel = supabase
+      .channel('public:app_state')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'app_state', filter: 'id=eq.global_hobby_data' },
+        (payload) => {
+          if (payload.new && payload.new.payload) {
+            setDashboards(payload.new.payload);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // 2. Function to update state and push changes to the shared database
+  const updateSharedData = async (newDashboards) => {
+    setDashboards(newDashboards);
+    setIsSyncing(true);
+
+    const { error } = await supabase
+      .from('app_state')
+      .update({ payload: newDashboards })
+      .eq('id', 'global_hobby_data');
+
+    if (error) {
+      console.error('Failed to sync changes:', error);
+    }
+    setIsSyncing(false);
+  };
+
+  // Rest of your component rendering code...
+}
     const { useState, useEffect, useRef } = React;
 
     function App() {
