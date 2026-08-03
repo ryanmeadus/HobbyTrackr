@@ -8,25 +8,25 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 app.use(session({
-  secret: 'hobby-tracker-secret-key',
+  secret: 'hobbytrackr-secret-key',
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 86400000 } // 24 hours
 }));
 
-// EMPTY STORES - No sample data or pre-existing accounts
+// Zero sample data: empty users and project databases
 const users = {};
 const userProjects = {};
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Auth middleware
+// Auth verification middleware
 function requireAuth(req, res, next) {
   if (req.session.user) return next();
   res.status(401).json({ error: 'Unauthorized' });
 }
 
-// Register Route
+// Account Creation / Registration
 app.post('/api/register', (req, res) => {
   const { username, password, name } = req.body;
 
@@ -35,14 +35,12 @@ app.post('/api/register', (req, res) => {
   }
 
   if (users[username]) {
-    return res.status(400).json({ success: false, message: 'Username already taken.' });
+    return res.status(400).json({ success: false, message: 'Username is already registered.' });
   }
 
-  // Create new user and initialize empty project array
   users[username] = { password, name };
-  userProjects[username] = [];
+  userProjects[username] = []; // Fresh empty project store
 
-  // Automatically log user in upon registration
   req.session.user = { username, name };
   res.json({ success: true, redirect: '/dashboard.html' });
 });
@@ -60,7 +58,7 @@ app.post('/api/login', (req, res) => {
   res.status(401).json({ success: false, message: 'Invalid username or password' });
 });
 
-// Session Status Check
+// Active User Check
 app.get('/api/user', (req, res) => {
   if (req.session.user) {
     return res.json({ authenticated: true, user: req.session.user });
@@ -75,14 +73,15 @@ app.post('/api/logout', (req, res) => {
   });
 });
 
-// --- PROTECTED HOBBY TRACKER API ROUTES ---
+// --- PROTECTED API ENDPOINTS ---
 
+// Fetch dashboard projects for logged-in user
 app.get('/api/projects', requireAuth, (req, res) => {
   const username = req.session.user.username;
-  const projects = userProjects[username] || [];
-  res.json(projects);
+  res.json(userProjects[username] || []);
 });
 
+// Create a new project
 app.post('/api/projects', requireAuth, (req, res) => {
   const username = req.session.user.username;
   if (!userProjects[username]) userProjects[username] = [];
@@ -101,6 +100,30 @@ app.post('/api/projects', requireAuth, (req, res) => {
   res.status(201).json(newProject);
 });
 
+// Update an existing project
+app.put('/api/projects/:id', requireAuth, (req, res) => {
+  const username = req.session.user.username;
+  const projectId = parseInt(req.params.id, 10);
+  const projects = userProjects[username] || [];
+
+  const index = projects.findIndex(p => p.id === projectId);
+  if (index !== -1) {
+    const { name, faction, quantity, points, status } = req.body;
+    projects[index] = {
+      ...projects[index],
+      name: name || projects[index].name,
+      faction: faction || projects[index].faction,
+      quantity: parseInt(quantity, 10) || projects[index].quantity,
+      points: parseInt(points, 10) || projects[index].points,
+      status: status || projects[index].status
+    };
+    return res.json({ success: true, project: projects[index] });
+  }
+
+  res.status(404).json({ success: false, message: 'Project not found' });
+});
+
+// Delete a project
 app.delete('/api/projects/:id', requireAuth, (req, res) => {
   const username = req.session.user.username;
   const projectId = parseInt(req.params.id, 10);
@@ -112,5 +135,5 @@ app.delete('/api/projects/:id', requireAuth, (req, res) => {
 });
 
 app.listen(3000, () => {
-  console.log('Hobby Tracker running at http://localhost:3000');
+  console.log('HobbyTrackr server running on http://localhost:3000');
 });
